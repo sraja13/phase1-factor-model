@@ -33,7 +33,10 @@ def compute_sma(df: pd.DataFrame, period: int = 20) -> pd.Series:
 
 def compute_ema(df: pd.DataFrame, period: int = 20) -> pd.Series:
     """
-    Compute Exponential Moving Average (EMA).
+    Compute Exponential Moving Average (EMA) using standard formula.
+    
+    Formula: EMA = (K × (C – P)) + P
+    Where: K = 2/(period + 1), C = Current Price, P = Previous EMA
     
     Args:
         df (pd.DataFrame): DataFrame with 'close' column
@@ -42,7 +45,22 @@ def compute_ema(df: pd.DataFrame, period: int = 20) -> pd.Series:
     Returns:
         pd.Series: Exponential Moving Average values
     """
-    return df['close'].ewm(span=period).mean()
+    close_prices = df['close'].values
+    ema_values = np.zeros_like(close_prices)
+    
+    # Calculate smoothing factor
+    k = 2 / (period + 1)
+    
+    # Initialize EMA with SMA for the first period values
+    ema_values[period - 1] = np.mean(close_prices[:period])
+    
+    # Calculate EMA using the standard formula: EMA = (K × (C – P)) + P
+    for i in range(period, len(close_prices)):
+        current_price = close_prices[i]
+        previous_ema = ema_values[i - 1]
+        ema_values[i] = (k * (current_price - previous_ema)) + previous_ema
+    
+    return pd.Series(ema_values, index=df.index)
 
 
 def compute_rsi(df: pd.DataFrame, period: int = 14) -> pd.Series:
@@ -67,7 +85,7 @@ def compute_rsi(df: pd.DataFrame, period: int = 14) -> pd.Series:
 
 def compute_macd(df: pd.DataFrame, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9) -> Tuple[pd.Series, pd.Series, pd.Series]:
     """
-    Compute MACD (Moving Average Convergence Divergence).
+    Compute MACD (Moving Average Convergence Divergence) using standard EMA formula.
     
     Args:
         df (pd.DataFrame): DataFrame with 'close' column
@@ -78,11 +96,17 @@ def compute_macd(df: pd.DataFrame, fast_period: int = 12, slow_period: int = 26,
     Returns:
         Tuple[pd.Series, pd.Series, pd.Series]: (MACD line, Signal line, Histogram)
     """
-    ema_fast = df['close'].ewm(span=fast_period).mean()
-    ema_slow = df['close'].ewm(span=slow_period).mean()
+    # Use our explicit EMA function for consistency
+    ema_fast = compute_ema(df, period=fast_period)
+    ema_slow = compute_ema(df, period=slow_period)
     
     macd_line = ema_fast - ema_slow
-    signal_line = macd_line.ewm(span=signal_period).mean()
+    
+    # Calculate signal line as EMA of MACD line
+    # Create a temporary DataFrame with MACD line for EMA calculation
+    temp_df = pd.DataFrame({'close': macd_line})
+    signal_line = compute_ema(temp_df, period=signal_period)
+    
     histogram = macd_line - signal_line
     
     return macd_line, signal_line, histogram
